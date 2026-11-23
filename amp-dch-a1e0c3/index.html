@@ -50,6 +50,13 @@ main{padding:clamp(18px,3vw,40px);max-width:1240px;width:100%}
 .kpi b{display:block;font:700 clamp(22px,2.6vw,30px) Montserrat,Arial,sans-serif;color:var(--bn2);white-space:nowrap}
 .kpi span{font-size:13px;color:var(--mute)}
 .kpi.warn b{color:var(--am)}
+.bar{display:flex;height:16px;border-radius:8px;overflow:hidden;background:var(--soft);margin:6px 0}
+.bar i{display:block;height:100%}
+.leg{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px;margin:8px 0 4px}
+.leg span::before{content:"";display:inline-block;width:11px;height:11px;border-radius:3px;background:var(--c);margin-right:7px;vertical-align:-1px}
+.etp{display:grid;grid-template-columns:minmax(0,200px) minmax(0,1fr) 64px;gap:12px;align-items:center;margin:10px 0;font-size:14px}
+.etp .bar{margin:0;height:12px}.etp b{text-align:right;font-variant-numeric:tabular-nums}
+@media(max-width:600px){.etp{grid-template-columns:minmax(0,1fr) 56px}.etp .bar{grid-column:1/-1;grid-row:2}}
 .two{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px}
 .lead{font-size:17px;max-width:70ch}
 .note{font-size:13px;color:var(--mute)}
@@ -151,17 +158,30 @@ function save(name,bytes){const u=URL.createObjectURL(new Blob([bytes],{type:"ap
 async function publish(){const st=getState();const kc=await crypto.subtle.importKey("raw",b64(D.ck),"AES-GCM",false,["encrypt"]);
  save("etat_i.bin",await encFile(KEY,st));setTimeout(async()=>save("etat_c.bin",await encFile(kc,st)),700);D.updated="Mis à jour le "+st.updated;
  $("#mPub").textContent="Deux fichiers téléchargés : etat_i.bin et etat_c.bin. Les déposer dans le dossier d du dépôt GitHub, à la place des anciens."}
-const STL=["À venir","En cours","Remis","Validé"],STS=["Prévu","Audité","Rapport remis","Validé"];
+const STL=["À venir","En cours","Remis","Validé"],STS=["Prévu","En cours","Audité","Rapport remis","Validé"];
+/* ---------- avancement (lu dans le fichier d'état) */
+const STC={"Prévu":"var(--line)","En cours":"#C77F2C","Audité":"#8FA9BF","Rapport remis":"#4A6B85","Validé":"#2f7d5b"};
+function avct(){const S=D.sites,n=S.length,c=k=>S.filter(s=>s.statut===k).length,enc=c("En cours"),val=c("Validé"),rap=c("Rapport remis")+val,fait=c("Audité")+rap;
+ const L=D.liv,ok=l=>l.st==="Remis"||l.st==="Validé",ld=L.filter(ok).length,nx=L.find(l=>!ok(l));
+ const now=new Date().toISOString().slice(0,10),R=D.plan.rows;let cur=null;R.forEach(r=>{if(now>=r[1])cur=r});
+ let et="À venir",es="lancement de la mission";if(cur){const m=/^Tournée (\d)/.exec(cur[0]);if(m){et="Étape 2";es="audits, tournée "+m[1]}else{const e=/^Étape (\d) · (.*)/.exec(cur[0]);if(e){et="Étape "+e[1];es=e[2]}else{et=cur[0];es=""}}if(now>R[R.length-1][2]){et="Terminée";es="toutes les étapes"}}
+ const pct=(a,b)=>b?Math.round(100*a/b):0,ET=[["1","Préparation méthodologique"],["2","Audits des déchèteries"],["3","Diagnostic comparatif"],["4","Plan pluriannuel d'investissement"]];
+ const row=(lab,a,b)=>`<div class="etp"><span>${esc(lab)}</span><div class="bar"><i style="width:${pct(a,b)}%;background:var(--bn2)"></i></div><b>${a} / ${b}</b></div>`;
+ return kpis([[fait+" / "+n,"sites audités"],[String(enc),"sites en cours d'audit"],[rap+" / "+n,"rapports remis"],[String(val),"rapports validés"],[ld+" / "+L.length,"livrables remis"],[et,es]])+
+ `<div class="card"><h2>Avancement des audits</h2><div class="bar" role="img" aria-label="${STS.map(k=>k+" "+c(k)).join(", ")}">${STS.map(k=>c(k)?`<i style="width:${100*c(k)/n}%;background:${STC[k]}" title="${k} : ${c(k)}"></i>`:"").join("")}</div>
+ <div class="leg">${STS.map(k=>`<span style="--c:${STC[k]}">${k} <b>${c(k)}</b></span>`).join("")}</div>
+ <h3>Par étape</h3>${ET.map(([e,lab])=>e==="2"?row("2 · "+lab+" (rapports)",rap,n):row(e+" · "+lab,L.filter(l=>l.e===e&&ok(l)).length,L.filter(l=>l.e===e).length)).join("")}
+ <p class="note">${nx?`Prochain livrable : ${esc(nx.l)}, prévu ${esc(nx.sem)}.`:"Tous les livrables sont remis."} ${esc(D.updated)}. Interlocuteur unique : Guillaume Jaubert, g.jaubert@arqane.fr</p></div>`}
 function livTable(){return`<div class="card"><h2>Livrables</h2><div class="scroll"><table class="stack"><thead><tr><th>Étape</th><th>Livrable</th><th>Date prévisionnelle</th><th>Statut</th></tr></thead><tbody>${D.liv.map(l=>`<tr><td>${esc(l.e)}</td><td>${esc(l.l)}</td><td style="white-space:nowrap">${esc(l.sem)}</td><td>${esc(l.st)}</td></tr>`).join("")}</tbody></table></div><p class="note">Dates prévisionnelles, en semaines.</p></div>`}
 function pilot(){return`<div class="card pil"><h2>Planning</h2><div class="scroll"><table><tr><th>Ligne</th><th>Début</th><th>Fin</th></tr>${D.plan.rows.map((r,i)=>`<tr><td><input data-pl="${i}|0" value="${esc(r[0])}"></td><td><input type="date" data-pl="${i}|1" value="${r[1]}"></td><td><input type="date" data-pl="${i}|2" value="${r[2]}"></td></tr>`).join("")}</table></div></div>
 <div class="card pil"><h2>Livrables</h2><div class="scroll"><table><tr><th>Étape</th><th>Livrable</th><th>Semaine prévisionnelle</th><th>Statut</th></tr>${D.liv.map((l,i)=>`<tr><td>${esc(l.e)}</td><td>${esc(l.l)}</td><td><input data-lv="${i}|sem" value="${esc(l.sem)}" placeholder="S22 2027"></td><td><select data-lv="${i}|st">${STL.map(x=>`<option ${x===l.st?"selected":""}>${x}</option>`).join("")}</select></td></tr>`).join("")}</table></div></div>
 <div class="card pil"><h2>Statut des sites</h2><div class="scroll"><table><tr><th>N°</th><th>Déchèterie</th><th>Tournée</th><th>Statut</th><th>Date de visite</th></tr>${[...D.sites].sort((a,b)=>a.tour-b.tour||a.n-b.n).map(s=>`<tr><td>${s.n}</td><td>${esc(s.nom)}</td><td>T${s.tour}</td><td><select data-st="${s.n}|statut">${STS.map(x=>`<option ${x===s.statut?"selected":""}>${x}</option>`).join("")}</select></td><td><input type="date" data-st="${s.n}|date" value="${s.date||""}"></td></tr>`).join("")}</table></div></div>
 <div class="card" style="position:sticky;bottom:10px;border-color:var(--am)"><h3 style="margin-top:0">Publier les modifications</h3><p class="note">Les changements s'affichent tout de suite ici. Pour les publier dans les deux espaces, générer les fichiers puis les déposer sur GitHub.</p><button class="btn p" data-pub="1">Générer les fichiers de mise à jour</button><p class="note" id="mPub"></p></div>`}
 /* ---------- vues */
-function render(){const V=D.pages[view]||{};let h="";
+function render(){let V=D.pages[view]||{};let h="";if(view==="accueil"&&D.sites)V={...V,kpis:null,blocks:["avct",...(V.blocks||[]).filter(b=>!/^<h2>(Votre interlocuteur|Quatre étapes)/.test(b))]};
  if(V.title)h+=`<h1>${esc(V.title)}</h1>`;if(V.lead)h+=`<p class="lead">${esc(V.lead)}</p>`;
  if(V.kpis)h+=kpis(V.kpis.map(k=>k[3]==="days"?[days(k[0])>=0?days(k[0])+" j":"Échu",k[1],k[2]]:k));
- (V.blocks||[]).forEach(b=>{if(b==="map")h+=mapCard();else if(b==="sites")h+=sitesTable();else if(b==="gantt")h+=gantt();else if(b==="docs")h+=docs();else if(b==="check")h+=checklist();else if(b==="liv")h+=livTable();else if(b==="pilot")h+=pilot();else h+=`<div class="card md">${b}</div>`});
+ (V.blocks||[]).forEach(b=>{if(b==="avct")h+=avct();else if(b==="map")h+=mapCard();else if(b==="sites")h+=sitesTable();else if(b==="gantt")h+=gantt();else if(b==="docs")h+=docs();else if(b==="check")h+=checklist();else if(b==="liv")h+=livTable();else if(b==="pilot")h+=pilot();else h+=`<div class="card md">${b}</div>`});
  $("#main").innerHTML=h;mapInit()}
 document.addEventListener("click",e=>{const t=e.target.closest("[data-v],[data-out],[data-t],[data-sel],[data-dl]");if(t&&t.closest(".pil"))return;if(!t)return;const d=t.dataset;
  if(d.v)go(d.v);else if(d.out){D=null;KEY=null;$("#main").innerHTML="";$("#app").style.display="none";$("#gate").style.display="grid";try{history.replaceState(null,"","#")}catch(er){}}
